@@ -4,3 +4,20 @@ A large portion of hospital inpatient management expenditure is due to high read
 
 # Files
 
+Cut1_Sourcecode_withboruta.html - 
+
+Cut3_Proj2_withrandomforest.html - 
+
+Dashbboard_ET_SPRB.pbix - 
+
+Dashbboard_ET_SPRB.pdf -
+
+DataMiningProject_Report_Ravi.docx -
+
+DataMiningSourceCodeFinal.Rmd - 
+
+DataMiningSourceCodeFinal.html - 
+
+Visualization_Report_SPRB.pdf - 
+
+diabetic_data.csv - 
