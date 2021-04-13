@@ -1,0 +1,516 @@
+---
+title: "Proj2"
+author: "Ravi"
+date: "11/26/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+## **Importing Data and Libraries**
+# Working directory
+#setwd("C:/Users/surya/Documents/MsBA/Term2S2/BA 636 Data mining/Project")
+
+# Library that helps us to work with data frame like objects and solve most common data manipulation challenges
+# skimr helps us with summary statistics of variable in a data set
+
+library(dplyr) 
+library(skimr)
+library(psych)
+library(ROSE)
+library(ggplot2)
+library(caret)
+library(stringr)
+library(Boruta)
+library(e1071)
+library(dplyr) 
+library(corrplot)
+library(fastDummies)
+library(forecast)
+library(MASS)
+library(xgboost)
+library(rpart)
+library(plotly)
+library(rpart.plot)
+```
+
+```{r, error=FALSE, warning=FALSE}
+mData <- read.csv("diabetic_data.csv") # Importing data from CSV file
+dData <- read.csv("IDs_mapping.csv") # Data variables description
+```
+
+```{r, error=FALSE, warning=FALSE}
+dData%>%
+knitr::kable(caption = "Data variables description", digits = 3)%>%
+  kableExtra::kable_styling(bootstrap_options = "striped", full_width = FALSE,position = "left")
+
+skim(mData) # Computing statistics by data type
+
+```
+
+```{r, error=FALSE, warning=FALSE}
+# Replacing instances of variables where there is "?" or "Unknown/Invalid"
+
+# count <- 0
+# for(i in 1:ncol(mData)){
+#   if(is.factor(mData[,i])){
+#     for(j in 1:nrow(mData)){
+#       if(mData[j,i]== "?" | mData[j,i]== "Unknown/Invalid" ){
+#         count <- count + 1
+#         mData[j,i] <- NA
+#       }
+#     }
+#     if(count > 0){
+#       print(c(colnames(mData)[i],count))
+#     }
+#   }
+#   count <- 0
+# }
+
+mData[ mData == "?" ] <- NA
+mData[ mData == "Unknown/Invalid" ] <- NA
+```
+
+```{r, error=FALSE, warning=FALSE}
+for (i in colnames(mData)){
+    cat(i, sum(is.na(mData[[i]]))/nrow(mData), "\n")
+}
+```
+
+```{r, error=FALSE, warning=FALSE}
+head(mData)
+
+mData$readmitted <- ifelse(mData$readmitted=="NO", 0, 1)
+
+mData$readmitted <- as.factor(mData$readmitted)
+
+head(mData)
+```
+
+```{r, error=FALSE, warning=FALSE}
+for (i in colnames(mData)){
+    cat(i, sum(is.na(mData[[i]]))/nrow(mData), "\n")
+}
+```
+
+```{r error=FALSE, warning=FALSE}
+# mData$payer_code
+# mData$payer_code <- droplevels(mData$payer_code)
+# round(((table(mData$payer_code, mData$readmitted))/nrow(mData))*100, 4)
+# sum(round(((table(mData$payer_code, mData$readmitted))/nrow(mData))*100, 4)[1:17])
+# sum(round(((table(mData$payer_code, mData$readmitted))/nrow(mData))*100, 4)[,2])
+# 32.2894/27.9534
+# round(((table(mData$readmitted))/nrow(mData))*100, 4)
+# 53.9119/46.0881
+
+mData <- subset(mData, select = -c(1, 2, 6, 11))
+```
+
+```{r, error=FALSE, warning=FALSE}
+for (i in colnames(mData)){
+    cat(i, sum(is.na(mData[[i]]))/nrow(mData), "\n")
+}
+```
+
+```{r, error=FALSE, warning=FALSE}
+mData$medical_specialty <- droplevels(mData$medical_specialty)
+mData$medical_specialty <- as.factor(mData$medical_specialty)
+levels(mData$medical_specialty)
+
+mData <- subset(mData, select = -c(8))
+```
+
+```{r, error=FALSE, warning=FALSE}
+backup1 <- mData
+
+```
+
+```{r, error=FALSE, warning=FALSE}
+mData <- mutate(mData, primary_diagnosis = ifelse(str_detect(diag_1, "V") | str_detect(diag_1, "E"),"Other",
+ifelse(str_detect(diag_1, "250"), "Diabetes",
+ifelse((as.integer(diag_1) >= 390 & as.integer(diag_1) <= 459) | as.integer(diag_1) == 785,"Circulatory",
+ifelse((as.integer(diag_1) >= 460 & as.integer(diag_1) <= 519) | as.integer(diag_1) == 786,"Respiratory",
+ifelse((as.integer(diag_1) >= 520 & as.integer(diag_1) <= 579) | as.integer(diag_1) == 787, "Digestive", 
+ifelse((as.integer(diag_1) >= 580 & as.integer(diag_1) <= 629) | as.integer(diag_1) == 788, "Genitourinary",
+ifelse((as.integer(diag_1) >= 140 & as.integer(diag_1) <= 239), "Neoplasms", ifelse((as.integer(diag_1) >= 710 & as.integer(diag_1) <= 739), "Musculoskeletal", ifelse((as.integer(diag_1) >= 800 & as.integer(diag_1) <= 999), "Injury", "Other"))))))))))
+
+mData$primary_diagnosis <- as.factor(mData$primary_diagnosis)
+```
+
+```{r}
+temp <- data.frame(table(mData$primary_diagnosis))
+```
+
+```{r}
+# barplot(table(mData$primary_diagnosis), main = "After collapsing and changing the type")
+fig <- plot_ly(
+  x = temp$Var1,
+  y = temp$Freq,
+  name = "Primary Diagnosis Barplot",
+  type = "bar",
+  title = "Primary Diagnosis Barplot"
+)
+
+fig
+```
+
+
+```{r, error=FALSE, warning=FALSE}
+levels(as.factor(mData$primary_diagnosis))
+```
+
+```{r, error=FALSE, warning=FALSE}
+mData <- subset(mData, select = -c(14, 15, 16))
+```
+
+```{r, error=FALSE, warning=FALSE}
+mData <- subset(mData, !is.na(race))
+mData <- subset(mData, !is.na(primary_diagnosis))
+mData <- subset(mData, !is.na(gender))
+```
+
+```{r, error=FALSE, warning=FALSE}
+for (i in colnames(mData)){
+    cat(i, sum(is.na(mData[[i]]))/nrow(mData), "\n")
+}
+```
+
+<!-- ```{r, error=FALSE, warning=FALSE}
+set.seed(100)
+boruta <- Boruta(readmitted ~., data = mData, doTrace = 2)
+
+plot(boruta, las = 2, cex.axis = 0.5)
+
+plotImpHistory(boruta)
+
+attStats(boruta)
+
+boruta
+``` -->
+
+```{r, error=FALSE, warning=FALSE}
+mData <- subset(mData, select = -c(18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 35, 36, 37, 38, 39))
+```
+
+```{r, error=FALSE, warning=FALSE}
+for (i in colnames(mData)){
+    cat(i, sum(is.na(mData[[i]]))/nrow(mData), "\n")
+}
+```
+
+```{r, error=FALSE, warning=FALSE}
+for (i in colnames(mData)){
+cat(i, sum(is.na(mData[[i]]))/nrow(mData), "\n")
+}
+```
+
+
+```{r, error=FALSE, warning=FALSE}
+corrplot(cor(mData[c(4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)]), method = "color")
+```
+
+```{r, error=FALSE, warning=FALSE}
+mData <- subset(mData, select = -c(10))
+```
+
+
+```{r, error=FALSE, warning=FALSE}
+corrplot(cor(mData[c(4, 5, 6, 7, 8, 9, 10, 11, 12, 13)]), method = "color")
+```
+
+```{r, error=FALSE, warning=FALSE}
+barplot(table(mData$age), main = "Before collapsing and changing the type")
+
+#I am regrouping the "age" to [0-40],[40-50],[50-60],[60-70],[70-80],[80-100]
+mData$age <- case_when(mData$age %in% c("[0-10)","[10-20)", "[20-30)","[30-40)") ~ "[0-40]",
+                       mData$age %in% c("[40-50)","[50-60)", "[60-70)") ~ "[40-70]",
+                       mData$age %in% c("[70-80)", "[80-90)", "[90-100)") ~ "[70-100]")
+
+mData$age <- as.factor(mData$age)
+
+barplot(table(mData$age), main = "After collapsing and changing the type")
+```
+
+```{r, error=FALSE, warning=FALSE}
+table(mData$admission_source_id, mData$admission_type_id)
+```
+
+
+```{r, error=FALSE, warning=FALSE}
+
+colnames(mData)[4] <- "admission_type"
+
+barplot(table(mData$admission_type), main = "Before collapsing and changing the type")
+
+mData$admission_type <- replace(mData$admission_type,mData$admission_type == 2, 1)
+mData$admission_type <- replace(mData$admission_type,mData$admission_type == 8, 5)
+mData$admission_type <- replace(mData$admission_type,mData$admission_type == 6, 5)
+mData$admission_type <- replace(mData$admission_type,mData$admission_type == 7, 1)
+
+
+mData$admission_type <- str_replace(mData$admission_type,"1","Emergency")
+mData$admission_type <- str_replace(mData$admission_type,"5","Other")
+mData$admission_type <- str_replace(mData$admission_type,"3","Elective")
+mData$admission_type <- str_replace(mData$admission_type,"4","Newborn")
+
+mData$admission_type <- as.factor(mData$admission_type)
+
+barplot(table(mData$admission_type), main = "After collapsing and changing the type")
+
+#levels(mData$admission_type)
+```
+
+
+```{r, error=FALSE, warning=FALSE}
+colnames(mData)[6] <- "admission_source"
+
+barplot(table(mData$admission_source), main = "Before collapsing and changing the type")
+
+mData$admission_source <- case_when(mData$admission_source %in% c("1","2","3") ~ "Physician Referral",mData$admission_source %in% c("4","5","6","8","9","10","11","12","13","14","15","17","18","19","20","21","22","23","24","25","26")~"Other",TRUE~"Emergency Room")                                          
+
+mData$admission_source <- as.factor(mData$admission_source)
+
+barplot(table(mData$admission_source), main = "After collapsing and changing the type")
+
+```
+
+
+```{r, error=FALSE, warning=FALSE}
+colnames(mData)[5] <- "discharge_disposition"
+
+barplot(table(mData$discharge_disposition), main = "Before collapsing and changing the type")
+
+#collapsing some other variables and grouping according to convenience
+mData$discharge_disposition <- case_when(mData$discharge_disposition %in% "1" ~ "Home", TRUE ~ "Other")
+
+mData$discharge_disposition <- as.factor(mData$discharge_disposition)
+
+barplot(table(mData$discharge_disposition), main = "After collapsing and changing the type")
+```
+
+```{r, error=FALSE, warning=FALSE}
+for (i in colnames(mData)){
+    cat(i, sum(is.na(mData[[i]]))/nrow(mData), "\n")
+}
+```
+
+```{r, error=FALSE, warning=FALSE}
+par(mfrow = c(2,4))
+boxplot(mData$time_in_hospital, main = "time_in_hospital")
+boxplot(mData$number_outpatient, main = "number_outpatient")
+boxplot(mData$number_emergency, main = "number_emergency")
+boxplot(mData$num_lab_procedures, main = "num_lab_procedures")
+boxplot(mData$number_diagnoses, main = "number_diagnoses")
+boxplot(mData$number_inpatient, main = "number_inpatient")
+boxplot(mData$num_procedures, main = "num_procedures")
+```
+
+```{r, error=FALSE, warning=FALSE}
+mData = subset(mData, mData$time_in_hospital <= 12)
+mData = subset(mData, mData$number_outpatient <= 30)
+mData = subset(mData, mData$number_emergency <= 60)
+mData = subset(mData, mData$num_lab_procedures <= 110)
+mData = subset(mData, mData$number_diagnoses <= 13)
+mData = subset(mData, mData$number_inpatient <= 20)
+mData = subset(mData, mData$num_procedures <= 5)
+```
+
+```{r, error=FALSE, warning=FALSE}
+par(mfrow = c(2,4))
+boxplot(mData$time_in_hospital, main = "time_in_hospital")
+boxplot(mData$number_outpatient, main = "number_outpatient")
+boxplot(mData$number_emergency, main = "number_emergency")
+boxplot(mData$num_lab_procedures, main = "num_lab_procedures")
+boxplot(mData$number_diagnoses, main = "number_diagnoses")
+boxplot(mData$number_inpatient, main = "number_inpatient")
+boxplot(mData$num_procedures, main = "num_procedures")
+```
+
+```{r, error=FALSE, warning=FALSE}
+mData <- droplevels(mData)
+```
+
+```{r, error=FALSE, warning=FALSE}
+mData_dummies <- fastDummies::dummy_columns(
+    mData,
+    select_columns = c(
+        "race", "gender", "age", "admission_type",
+        "discharge_disposition", "admission_source",
+        "max_glu_serum", "A1Cresult", "metformin",
+        "insulin", "diabetesMed", "primary_diagnosis"
+    ),
+    remove_first_dummy = TRUE, 
+    remove_selected_columns = TRUE
+)
+```
+
+```{r, error=FALSE, warning=FALSE}
+head(mData_dummies)
+```
+
+```{r, error=FALSE, warning=FALSE}
+mData_dummies <- droplevels(mData_dummies)
+```
+
+```{r, error=FALSE, warning=FALSE}
+set.seed(32)
+samp <- sample(1:nrow(mData_dummies),round(0.60*nrow(mData_dummies)))
+DF.training <- mData_dummies[samp,]
+DF.val <- mData_dummies[-samp,]
+```
+
+```{r, error=FALSE, warning=FALSE}
+dim(DF.training)
+dim(DF.val)
+```
+
+```{r, error=FALSE, warning=FALSE}
+stepwiseLogit <- glm(readmitted ~ ., data=DF.training, family=binomial(link="logit")) %>%
+  stepAIC(trace = TRUE)
+```
+
+```{r, error=FALSE, warning=FALSE}
+summary(stepwiseLogit)
+```
+
+```{r, error=FALSE, warning=FALSE}
+round(data.frame(summary(stepwiseLogit)$coefficients, odds = exp(coef(stepwiseLogit))), 3)
+```
+
+```{r, error=FALSE, warning=FALSE}
+pred_stplog <- predict(stepwiseLogit, DF.val, type = "response")
+```
+
+```{r, error=FALSE, warning=FALSE}
+# create empty accuracy table
+accT = c()
+# compute accuracy per cutoff
+for (cut in seq(0,1,0.1)){
+cm <- confusionMatrix(as.factor(ifelse(pred_stplog > cut, 1, 0)), as.factor(DF.val$readmitted), positive = "1")
+accT = c(accT, cm$byClass[11])
+}
+```
+
+```{r, error=FALSE, warning=FALSE}
+# plot accuracy
+plot(accT ~ seq(0,1,0.1), xlab = "Cutoff Value", ylab = "", type = "l", ylim = c(0, 1))
+lines(1-accT ~ seq(0,1,0.1), type = "l", lty = 2)
+legend("topright", c("balanced accuracy", "overall balanced error"), lty = c(1, 2), merge = TRUE)
+```
+
+```{r, error=FALSE, warning=FALSE}
+confusionMatrix(as.factor(ifelse(pred_stplog > 0.5, 1, 0)), as.factor(DF.val$readmitted), positive = "1")
+```
+
+```{r, error=FALSE, warning=FALSE}
+# grow tree
+classification_tree <- rpart(stepwiseLogit$formula, method="class", data=DF.training, control = ("numsplits" = 2), "cp" = 0.0005)
+```
+
+```{r, error=FALSE, warning=FALSE}
+printcp(classification_tree) # display the results
+```
+```{r}
+#classification_tree
+```
+
+```{r}
+plotcp(classification_tree)
+```
+
+```{r}
+rpart.plot(classification_tree, cex = 0.60)
+```
+
+```{r, error=FALSE, warning=FALSE}
+pred_c = predict(classification_tree, newdata = DF.val)
+# create empty accuracy table
+accT = c()
+# compute accuracy per cutoff
+for (cut in seq(0,1,0.1)){
+cm <- confusionMatrix(as.factor(ifelse(pred_c[, 2]>cut, 1, 0)), as.factor(DF.val$readmitted), positive = "1" )
+accT = c(accT, cm$byClass[11])
+}
+
+cm
+
+#pred_c
+```
+
+```{r, error=FALSE, warning=FALSE}
+# plot accuracy
+plot(accT ~ seq(0,1,0.1), xlab = "Cutoff Value", ylab = "", type = "l", ylim = c(0, 1))
+lines(1-accT ~ seq(0,1,0.1), type = "l", lty = 2)
+legend("topright", c("balanced accuracy", "overall balanced error"), lty = c(1, 2), merge = TRUE)
+```
+```{r}
+NBMod_CV <- naiveBayes(readmitted ~ ., method="nb", data=DF.training)
+
+NB_pred_CV <- predict(NBMod_CV, DF.val, type="raw")
+
+confusionMatrix(as.factor(ifelse(NB_pred_CV[, 2]>0.5, 1, 0)), DF.val$readmitted)
+```
+
+
+```{r}
+# create empty accuracy table
+accT = c()
+# compute accuracy per cutoff
+for (cut in seq(0,1,0.1)){
+cm <- confusionMatrix(as.factor(ifelse(NB_pred_CV[, 2]>cut, 1, 0)), as.factor(DF.val$readmitted), positive = "1" )
+accT = c(accT, cm$byClass[11])
+}
+```
+
+```{r}
+plot(accT ~ seq(0,1,0.1), xlab = "Cutoff Value", ylab = "", type = "l", ylim = c(0, 1))
+lines(1-accT ~ seq(0,1,0.1), type = "l", lty = 2)
+legend("topright", c("balanced accuracy", "overall balanced error"), lty = c(1, 2), merge = TRUE)
+```
+
+
+
+<!--
+```{r, error=FALSE, warning=FALSE}
+logitMod_CV <- train(readmitted ~ ., data = DF.training, method = "glm", family = "binomial")
+
+logit_pred_CV <- predict(logitMod_CV, DF.val)
+
+confusionMatrix(logit_pred_CV, DF.val$readmitted)
+```
+
+```{r, error=FALSE, warning=FALSE}
+#RFMod_CV <- train(readmitted ~., data = DF.training,method = "rf")
+
+#RF_pred_CV <- predict(RFMod_CV, DF.val)
+
+#confusionMatrix(RF_pred_CV, DF.val$readmitted)
+```
+
+```{r, error=FALSE, warning=FALSE}
+varImp(logitMod_CV)
+
+ggplot(varImp(logitMod_CV))
+```
+
+```{r, error=FALSE, warning=FALSE}
+ggplot(mDatao,aes(x=num_procedures,group=readmitted,fill=readmitted))+ geom_histogram(position="identity",alpha=0.8,binwidth=1)+theme_bw()
+
+ggplot(mDatao,aes(x=time_in_hospital,group=readmitted,fill=readmitted))+ geom_histogram(position="identity",alpha=0.8,binwidth=1)+theme_bw()
+
+ggplot(mDatao,aes(number_diagnoses,group=readmitted,fill=readmitted))+ geom_histogram(position="identity",alpha=0.8,binwidth=1)+theme_bw()
+
+ggplot(mDatao,aes(num_lab_procedures,group=readmitted,fill=readmitted))+ geom_histogram(position="identity",alpha=0.8,binwidth=1)+theme_bw()
+
+ggplot(mDatao,aes(num_medications,group=readmitted,fill=readmitted))+ geom_histogram(position="identity",alpha=0.8,binwidth=1)+theme_bw()
+```
+
+```{r}
+roc.curve(DF.val$readmitted, pred_stplog, plotit = T, col = "red")
+
+roc.curve(DF.val$readmitted, NB_pred_CV, plotit = T, add.roc = T, col = "green")
+
+roc.curve(DF.val$readmitted, pred_c, plotit = T, add.roc = T, col = "blue")
+
+```
+-->
